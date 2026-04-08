@@ -11,10 +11,11 @@ datasource db {
 
 // 2. MODELO DO PRESTADOR (MICROEMPREENDEDOR)
 model Professional {
-  id           String        @id @default(uuid()) // Identificador único seguro
+  id           Int        @id @default(autoincrement()) // Identificador único seguro
   name         String        // Nome do prestador
   email        String        @unique // Email para login (não pode haver repetidos)
   createdAt    DateTime      @default(now()) // Data em que o registo foi criado
+  isActive  Boolean  @default(true)
   
   // Relacionamentos: Um prestador tem vários serviços e vários agendamentos
   services     Service[]
@@ -23,7 +24,7 @@ model Professional {
 
 // 3. MODELO DO CLIENTE
 model Client {
-  id           String        @id @default(uuid())
+  id           Int        @id @default(autoincrement())
   name         String
   phone        String        // Importante para o prestador contactar o cliente
   email        String?       @unique // Opcional (?) caso o cliente só forneça o telefone
@@ -34,13 +35,13 @@ model Client {
 
 // 4. MODELO DO SERVIÇO
 model Service {
-  id             String       @id @default(uuid())
+  id             Int       @id @default(autoincrement())
   name           String       // Ex: "Manicure"
   durationMinutes Int         // Duração em minutos (ex: 60) para calcular horários disponíveis
   price          Decimal      // Preço do serviço
   
   // Relacionamento: Este serviço pertence a um Prestador
-  professionalId String
+  professionalId Int
   professional   Professional @relation(fields: [professionalId], references: [id])
   
   appointments   Appointment[]
@@ -48,20 +49,20 @@ model Service {
 
 // 5. MODELO DE AGENDAMENTO (O Cruzamento de Dados)
 model Appointment {
-  id             String       @id @default(uuid())
+  id             Int       @id @default(autoincrement())
   startTime      DateTime     // Data e hora de início
   endTime        DateTime     // Data e hora de término (calculado com base no serviço)
   status         String       @default("PENDING") // Status: PENDING, CONFIRMED, CANCELED
   
   // Quem é o cliente?
-  clientId       String
+  clientId       Int
   client         Client       @relation(fields: [clientId], references: [id])
   
   // Quem é o prestador?
-  professionalId String
+  professionalId Int
   professional   Professional @relation(fields: [professionalId], references: [id])
   
   // Qual é o serviço?
-  serviceId      String
+  serviceId      Int
   service        Service      @relation(fields: [serviceId], references: [id])
 }
