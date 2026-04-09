@@ -1,8 +1,9 @@
 import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { ILike, Repository } from "typeorm";
+import { ILike, Repository, DeleteResult } from "typeorm";
 import { Servicos } from "../entities/servicos.entity";
-import { DeleteResult } from "typeorm/browser";
+import { CreateServicosDto } from "../dto/create-servicos.dto";
+import { UpdateServicosDto } from "../dto/update-servicos.dto";
 
 @Injectable()
 export class ServicosService {
@@ -29,7 +30,7 @@ export class ServicosService {
         return servicos;
     }
 
-    async findByUsuario(nome: string): Promise<Servicos[]> {
+    async findByNome(nome: string): Promise<Servicos[]> {
         return await this.servicosRepository.find({
             where: {
                 nome: ILike(`%${nome}%`)
@@ -37,29 +38,37 @@ export class ServicosService {
         });
     }
 
-    async create(servicos: Servicos): Promise<Servicos> {
-        return await this.servicosRepository.save(servicos);
+    async create(createServicosDto: CreateServicosDto): Promise<Servicos> {
+        const servicoCriado = this.servicosRepository.create(createServicosDto);
+        return await this.servicosRepository.save(servicoCriado);
     }
 
-    async update(servicos: Servicos): Promise<Servicos> {
-        let existingService = await this.servicosRepository.findOne({
-            where: {
-                nome: servicos.nome
+    async update(updateServicosDto: UpdateServicosDto): Promise<Servicos> {
+        const servico = await this.findById(updateServicosDto.id);
+
+        if (updateServicosDto.nome) {
+            const existingService = await this.servicosRepository.findOne({
+                where: { nome: updateServicosDto.nome }
+            });
+            if (existingService && existingService.id !== updateServicosDto.id) {
+                throw new HttpException('Serviço já existe!', HttpStatus.BAD_REQUEST);
             }
-        });
-    
-        if (existingService && existingService.id !== servicos.id) {
-            throw new HttpException('Serviço já existe!', HttpStatus.BAD_REQUEST);
+            servico.nome = updateServicosDto.nome;
         }
-    
-        return await this.servicosRepository.save(servicos);
+
+        if (updateServicosDto.preco !== undefined) {
+            servico.preco = updateServicosDto.preco;
+        }
+
+        if (updateServicosDto.duracao_minutos !== undefined) {
+            servico.duracao_minutos = updateServicosDto.duracao_minutos;
+        }
+
+        return await this.servicosRepository.save(servico);
     }
 
     async delete(id: number): Promise<DeleteResult> {
-        let buscarServico = await this.findById(id);
-        if (!buscarServico)
-            throw new HttpException('Serviço não encontrado!', HttpStatus.NOT_FOUND);
-
+        await this.findById(id);
         return await this.servicosRepository.delete(id);
     }
 

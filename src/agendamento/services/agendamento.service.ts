@@ -5,6 +5,7 @@ import { Agendamento } from "../entities/agendamento.entity";
 import { Servicos } from "../../servicos/entities/servicos.entity";
 import { Usuarios } from "../../usuarios/entities/usuarios.entity";
 import { CreateAgendamentoDto } from "../dto/create-agendamento.dto";
+import { UpdateAgendamentoDto } from "../dto/update-agendamento.dto";
 
 @Injectable()
 export class AgendamentoService {
@@ -70,8 +71,39 @@ export class AgendamentoService {
         return await this.agendamentoRepository.save(novoAgendamento);
     }
 
-    async update(agendamento: Agendamento): Promise<Agendamento> {
-        await this.findById(agendamento.id);
+    async update(updateAgendamentoDto: UpdateAgendamentoDto): Promise<Agendamento> {
+        const agendamento = await this.findById(updateAgendamentoDto.id);
+
+        if (updateAgendamentoDto.start_time) {
+            agendamento.start_time = new Date(updateAgendamentoDto.start_time);
+        }
+
+        if (updateAgendamentoDto.status) {
+            agendamento.status = updateAgendamentoDto.status;
+        }
+
+        if (updateAgendamentoDto.servicoId) {
+            const servico = await this.servicosRepository.findOne({
+                where: { id: updateAgendamentoDto.servicoId }
+            });
+            if (!servico) {
+                throw new HttpException('Serviço não encontrado!', HttpStatus.NOT_FOUND);
+            }
+            agendamento.servico = servico;
+            // Recalcular end_time baseado na nova duração do serviço
+            agendamento.end_time = new Date(agendamento.start_time.getTime() + servico.duracao_minutos * 60000);
+        }
+
+        if (updateAgendamentoDto.usuarioId) {
+            const usuario = await this.usuariosRepository.findOne({
+                where: { id: updateAgendamentoDto.usuarioId }
+            });
+            if (!usuario) {
+                throw new HttpException('Usuário não encontrado!', HttpStatus.NOT_FOUND);
+            }
+            agendamento.usuario = usuario;
+        }
+
         this.validateAgendamentoDates(agendamento);
         await this.ensureNoTimeConflict(agendamento);
 

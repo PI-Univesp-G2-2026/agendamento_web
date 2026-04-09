@@ -8,6 +8,7 @@ import { UsuariosModule } from './usuarios/usuarios.module';
 import { ServicosModule } from './servicos/servicos.module';
 import { Servicos } from './servicos/entities/servicos.entity';
 import { Usuarios } from './usuarios/entities/usuarios.entity';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -23,7 +24,8 @@ import { Usuarios } from './usuarios/entities/usuarios.entity';
     }),
     AgendamentoModule,
     ServicosModule,
-    UsuariosModule
+    UsuariosModule,
+    AuthModule
   ],
   controllers: [],
   providers: [],

@@ -1,6 +1,8 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put } from "@nestjs/common";
 import { Usuarios } from "../entities/usuarios.entity";
 import { UsuariosService } from "../services/usuarios.service";
+import { CreateUsuariosDto } from "../dto/create-usuarios.dto";
+import { UpdateUsuariosDto } from "../dto/update-usuarios.dto";
 import { DeleteResult } from "typeorm";
 
 @Controller("/usuarios")
@@ -21,20 +23,20 @@ export class UsuariosController {
 
     @Get('/nome/:nome')
     @HttpCode(HttpStatus.OK)
-    findBynome(@Param('nome') nome: string): Promise<Usuarios[]> {
-        return this.usuariosService.findByUsuario(nome);
+    findByNome(@Param('nome') nome: string): Promise<Usuarios[]> {
+        return this.usuariosService.findByNome(nome);
     }
 
     @Post()
     @HttpCode(HttpStatus.CREATED)
-    create(@Body() usuarios: Usuarios): Promise<Usuarios> {
-        return this.usuariosService.create(usuarios);
+    create(@Body() createUsuariosDto: CreateUsuariosDto): Promise<Usuarios> {
+        return this.usuariosService.create(createUsuariosDto);
     }
 
     @Put()
     @HttpCode(HttpStatus.OK)
-    update(@Body() usuarios: Usuarios): Promise<Usuarios> {
-        return this.usuariosService.update(usuarios);
+    update(@Body() updateUsuariosDto: UpdateUsuariosDto): Promise<Usuarios> {
+        return this.usuariosService.update(updateUsuariosDto);
     }
 
     @Delete('/:id')

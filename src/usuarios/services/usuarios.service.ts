@@ -1,8 +1,9 @@
 import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { ILike, Repository } from "typeorm";
+import { ILike, Repository, DeleteResult } from "typeorm";
 import { Usuarios } from "../entities/usuarios.entity";
-import { DeleteResult } from "typeorm/browser";
+import { CreateUsuariosDto } from "../dto/create-usuarios.dto";
+import { UpdateUsuariosDto } from "../dto/update-usuarios.dto";
 
 @Injectable()
 export class UsuariosService {
@@ -29,7 +30,7 @@ export class UsuariosService {
         return usuarios;
     }
 
-    async findByUsuario(nome: string): Promise<Usuarios[]> {
+    async findByNome(nome: string): Promise<Usuarios[]> {
         return await this.usuariosRepository.find({
             where: {
                 nome: ILike(`%${nome}%`)
@@ -37,29 +38,41 @@ export class UsuariosService {
         });
     }
 
-    async create(usuarios: Usuarios): Promise<Usuarios> {
-        return await this.usuariosRepository.save(usuarios);
+    async create(createUsuariosDto: CreateUsuariosDto): Promise<Usuarios> {
+        const usuarioCriado = this.usuariosRepository.create(createUsuariosDto);
+        return await this.usuariosRepository.save(usuarioCriado);
     }
 
-    async update(usuarios: Usuarios): Promise<Usuarios> {
-        let existingUser = await this.usuariosRepository.findOne({
-            where: {
-                nome: usuarios.nome
+    async update(updateUsuariosDto: UpdateUsuariosDto): Promise<Usuarios> {
+        const usuario = await this.findById(updateUsuariosDto.id);
+
+        if (updateUsuariosDto.nome) {
+            const existingUser = await this.usuariosRepository.findOne({
+                where: { nome: updateUsuariosDto.nome }
+            });
+            if (existingUser && existingUser.id !== updateUsuariosDto.id) {
+                throw new HttpException('Usuário já existe!', HttpStatus.BAD_REQUEST);
             }
-        });
-    
-        if (existingUser && existingUser.id !== usuarios.id) {
-            throw new HttpException('Usuário já existe!', HttpStatus.BAD_REQUEST);
+            usuario.nome = updateUsuariosDto.nome;
         }
-    
-        return await this.usuariosRepository.save(usuarios);
+
+        if (updateUsuariosDto.email) {
+            usuario.email = updateUsuariosDto.email;
+        }
+
+        if (updateUsuariosDto.senha) {
+            usuario.senha = updateUsuariosDto.senha;
+        }
+
+        if (updateUsuariosDto.tipo) {
+            usuario.tipo = updateUsuariosDto.tipo;
+        }
+
+        return await this.usuariosRepository.save(usuario);
     }
 
     async delete(id: number): Promise<DeleteResult> {
-        let buscarUsuario = await this.findById(id);
-        if (!buscarUsuario)
-            throw new HttpException('Usuário não encontrado!', HttpStatus.NOT_FOUND);
-
+        await this.findById(id);
         return await this.usuariosRepository.delete(id);
     }
 
