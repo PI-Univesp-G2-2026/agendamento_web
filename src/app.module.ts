@@ -4,6 +4,10 @@ import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Agendamento } from './agendamento/entities/agendamento.entity';
 import { AgendamentoModule } from './agendamento/agendamento.module';
+import { UsuariosModule } from './usuarios/usuarios.module';
+import { ServicosModule } from './servicos/servicos.module';
+import { Servicos } from './servicos/entities/servicos.entity';
+import { Usuarios } from './usuarios/entities/usuarios.entity';
 
 @Module({
   imports: [
@@ -14,10 +18,12 @@ import { AgendamentoModule } from './agendamento/agendamento.module';
       username: 'root',
       password: 'root',
       database: 'db_agendamentoweb',
-      entities: [Agendamento],
+      entities: [Agendamento, Servicos, Usuarios],
       synchronize: true,
     }),
     AgendamentoModule,
+    ServicosModule,
+    UsuariosModule
   ],
   controllers: [],
   providers: [],
