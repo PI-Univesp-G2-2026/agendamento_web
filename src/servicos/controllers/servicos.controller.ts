@@ -1,10 +1,12 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { Servicos } from "../entities/servicos.entity";
 import { ServicosService } from "../services/servicos.service";
 import { CreateServicosDto } from "../dto/create-servicos.dto";
 import { UpdateServicosDto } from "../dto/update-servicos.dto";
 import { DeleteResult } from "typeorm";
+import { JwtAuthGuard } from "../../auth/guard/jwt-auth.guard";
 
+@UseGuards(JwtAuthGuard)
 @Controller("/servicos")
 export class ServicosController {
   constructor(private readonly servicosService: ServicosService) { }

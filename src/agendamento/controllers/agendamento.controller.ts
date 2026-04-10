@@ -1,14 +1,16 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { AgendamentoService } from "../services/agendamento.service";
 import { Agendamento } from "../entities/agendamento.entity";
 import { CreateAgendamentoDto } from "../dto/create-agendamento.dto";
 import { UpdateAgendamentoDto } from "../dto/update-agendamento.dto";
 import { DeleteResult } from "typeorm";
+import { JwtAuthGuard } from "../../auth/guard/jwt-auth.guard";
 
+@UseGuards(JwtAuthGuard)
 @Controller("/agendamentos")
 export class AgendamentoController {
   constructor(private readonly agendamentoService: AgendamentoService) { }
-  
+
 
   @Get()
   @HttpCode(HttpStatus.OK)

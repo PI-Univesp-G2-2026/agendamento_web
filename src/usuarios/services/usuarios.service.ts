@@ -30,6 +30,16 @@ export class UsuariosService {
         return usuarios;
     }
 
+    async findByUsuario(email: string): Promise<Usuarios> {
+    const usuarioEncontrado = await this.usuariosRepository.findOne({
+      where: { email },
+    });
+
+    if (!usuarioEncontrado)
+      throw new HttpException('Usuário não encontrado!', HttpStatus.NOT_FOUND);
+
+    return usuarioEncontrado;
+  }
     async findByNome(nome: string): Promise<Usuarios[]> {
         return await this.usuariosRepository.find({
             where: {

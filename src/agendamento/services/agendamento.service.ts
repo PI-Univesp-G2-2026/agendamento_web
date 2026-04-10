@@ -21,7 +21,12 @@ export class AgendamentoService {
     ) { }
 
     async findAll(): Promise<Agendamento[]> {
-        return await this.agendamentoRepository.find();
+        return await this.agendamentoRepository.find({
+            relations: {
+                usuario: true,
+                servico: true
+            }
+        });
     }
 
     async findById(id: number): Promise<Agendamento> {
@@ -29,6 +34,10 @@ export class AgendamentoService {
             where: {
                 id
             },
+            relations:{
+                usuario: true,
+                servico: true
+            }
         });
 
         if (!agendamento)
