@@ -4,12 +4,14 @@ import { ILike, Repository, DeleteResult } from "typeorm";
 import { Usuarios } from "../entities/usuarios.entity";
 import { CreateUsuariosDto } from "../dto/create-usuarios.dto";
 import { UpdateUsuariosDto } from "../dto/update-usuarios.dto";
+import { Bcrypt } from "../../auth/bcrypt/bcrypt";
 
 @Injectable()
 export class UsuariosService {
     constructor(
         @InjectRepository(Usuarios)
-        private usuariosRepository: Repository<Usuarios>
+        private usuariosRepository: Repository<Usuarios>,
+        private bcrypt: Bcrypt,
     ) { }
 
     async findAll(): Promise<Usuarios[]> {
@@ -49,6 +51,7 @@ export class UsuariosService {
     }
 
     async create(createUsuariosDto: CreateUsuariosDto): Promise<Usuarios> {
+        createUsuariosDto.senha = await this.bcrypt.criptografarSenha(createUsuariosDto.senha);
         const usuarioCriado = this.usuariosRepository.create(createUsuariosDto);
         return await this.usuariosRepository.save(usuarioCriado);
     }
@@ -71,7 +74,7 @@ export class UsuariosService {
         }
 
         if (updateUsuariosDto.senha) {
-            usuario.senha = updateUsuariosDto.senha;
+            usuario.senha = await this.bcrypt.criptografarSenha(updateUsuariosDto.senha);
         }
 
         if (updateUsuariosDto.tipo) {

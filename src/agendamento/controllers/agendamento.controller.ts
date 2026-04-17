@@ -5,9 +5,13 @@ import { CreateAgendamentoDto } from "../dto/create-agendamento.dto";
 import { UpdateAgendamentoDto } from "../dto/update-agendamento.dto";
 import { DeleteResult } from "typeorm";
 import { JwtAuthGuard } from "../../auth/guard/jwt-auth.guard";
+import { ApiTags } from "@nestjs/swagger/dist/decorators/api-use-tags.decorator";
+import { ApiBearerAuth } from "@nestjs/swagger/dist/decorators/api-bearer.decorator";
 
+@ApiTags('Agendamento')
 @UseGuards(JwtAuthGuard)
 @Controller("/agendamentos")
+@ApiBearerAuth()
 export class AgendamentoController {
   constructor(private readonly agendamentoService: AgendamentoService) { }
 

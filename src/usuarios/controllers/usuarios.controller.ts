@@ -5,8 +5,12 @@ import { CreateUsuariosDto } from "../dto/create-usuarios.dto";
 import { UpdateUsuariosDto } from "../dto/update-usuarios.dto";
 import { DeleteResult } from "typeorm";
 import { JwtAuthGuard } from "../../auth/guard/jwt-auth.guard";
+import { ApiTags } from "@nestjs/swagger/dist/decorators/api-use-tags.decorator";
+import { ApiBearerAuth } from "@nestjs/swagger/dist/decorators/api-bearer.decorator";
 
+@ApiTags('Usuarios')
 @Controller("/usuarios")
+@ApiBearerAuth()
 export class UsuariosController {
   constructor(private readonly usuariosService: UsuariosService) { }
     @UseGuards(JwtAuthGuard)

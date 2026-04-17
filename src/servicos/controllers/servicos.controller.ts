@@ -5,9 +5,13 @@ import { CreateServicosDto } from "../dto/create-servicos.dto";
 import { UpdateServicosDto } from "../dto/update-servicos.dto";
 import { DeleteResult } from "typeorm";
 import { JwtAuthGuard } from "../../auth/guard/jwt-auth.guard";
+import { ApiTags } from "@nestjs/swagger/dist/decorators/api-use-tags.decorator";
+import { ApiBearerAuth } from "@nestjs/swagger/dist/decorators/api-bearer.decorator";
 
+@ApiTags('Servicos')
 @UseGuards(JwtAuthGuard)
 @Controller("/servicos")
+@ApiBearerAuth()
 export class ServicosController {
   constructor(private readonly servicosService: ServicosService) { }
 

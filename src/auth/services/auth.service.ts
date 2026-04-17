@@ -13,14 +13,14 @@ export class AuthService{
         private bcrypt: Bcrypt
     ){ }
 
-    async validateUser(email: string, password: string): Promise<any>{
+    async validateUser(email: string, senha: string): Promise<any>{
 
         const buscaUsuario = await this.usuarioService.findByUsuario(email)
 
         if(!buscaUsuario)
             throw new HttpException('Usuário não encontrado!', HttpStatus.NOT_FOUND)
 
-        const matchPassword = await this.bcrypt.compararSenhas(password, buscaUsuario.senha)
+        const matchPassword = await this.bcrypt.compararSenhas(senha, buscaUsuario.senha)
 
         if(buscaUsuario && matchPassword){
             const { senha, ...resposta } = buscaUsuario
