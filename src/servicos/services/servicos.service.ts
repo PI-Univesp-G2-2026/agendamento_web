@@ -2,7 +2,7 @@ import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { ILike, Repository, DeleteResult } from "typeorm";
 import { Servicos } from "../entities/servicos.entity";
-import { Usuarios } from "../../usuarios/entities/usuarios.entity"; // 👇 Importe a entidade de Usuários
+import { Usuarios } from "../../usuarios/entities/usuarios.entity"; 
 import { CreateServicosDto } from "../dto/create-servicos.dto";
 import { UpdateServicosDto } from "../dto/update-servicos.dto";
 
@@ -12,7 +12,6 @@ export class ServicosService {
         @InjectRepository(Servicos)
         private servicosRepository: Repository<Servicos>,
 
-        // 👇 ADICIONE O REPOSITÓRIO DE USUÁRIOS AQUI NO CONSTRUTOR:
         @InjectRepository(Usuarios)
         private usuariosRepository: Repository<Usuarios>
     ) { }
@@ -42,19 +41,15 @@ export class ServicosService {
         });
     }
 
-    // 🛠️ MÉTODO CREATE CORRIGIDO E AMARRADO:
     async create(createServicosDto: CreateServicosDto): Promise<Servicos> {
-        // 1. Busca a entidade do profissional usando o usuarioId enviado pelo React
         const usuario = await this.usuariosRepository.findOne({
             where: { id: createServicosDto.usuarioId }
         });
 
-        // 2. Se o usuário não existir, barra a operação
         if (!usuario) {
             throw new HttpException('Profissional prestador não encontrado!', HttpStatus.NOT_FOUND);
         }
 
-        // 3. Cria o objeto acoplando a entidade Usuarios inteira, não só o ID solto
         const novoServico = this.servicosRepository.create({
             nome: createServicosDto.nome,
             preco: createServicosDto.preco,
@@ -65,8 +60,16 @@ export class ServicosService {
         return await this.servicosRepository.save(novoServico);
     }
 
-    async update(updateServicosDto: UpdateServicosDto): Promise<Servicos> {
+    async update(updateServicosDto: UpdateServicosDto, usuarioLogado: any): Promise<Servicos> {
         const servico = await this.findById(updateServicosDto.id);
+
+        // 🔒 TRAVA DE SEGURANÇA: Impede que um empreendedor mude o serviço de outro
+        if (!servico.usuario || servico.usuario.id !== usuarioLogado.id) {
+            throw new HttpException(
+                'Você não tem permissão para alterar um serviço que não pertence ao seu catálogo!', 
+                HttpStatus.FORBIDDEN
+            );
+        }
 
         if (updateServicosDto.nome) {
             const existingService = await this.servicosRepository.findOne({
@@ -89,8 +92,17 @@ export class ServicosService {
         return await this.servicosRepository.save(servico);
     }
 
-    async delete(id: number): Promise<DeleteResult> {
-        await this.findById(id);
+    async delete(id: number, usuarioLogado: any): Promise<DeleteResult> {
+        const servico = await this.findById(id);
+        
+        // 🔒 TRAVA DE SEGURANÇA: Impede que um empreendedor remova o serviço de outro
+        if (!servico.usuario || servico.usuario.id !== usuarioLogado.id) {
+            throw new HttpException(
+                'Você não tem permissão para excluir um serviço que não pertence ao seu catálogo!', 
+                HttpStatus.FORBIDDEN
+            );
+        }
+
         return await this.servicosRepository.delete(id);
     }
 }

@@ -84,19 +84,41 @@ export class AgendamentoService {
         return await this.agendamentoRepository.save(novoAgendamento);
     }
 
-    // 🛠️ MÉTODO UPDATE ATUALIZADO COM A TRAVA DE SEGURANÇA POR TIPO DE USUÁRIO:
+    // 🛠️ MÉTODO UPDATE ATUALIZADO COM AS DUAS TRAVAS DE SEGURANÇA (PERFIL E PROPRIEDADE):
     async update(updateAgendamentoDto: UpdateAgendamentoDto, usuarioLogado: any): Promise<Agendamento> {
         const agendamento = await this.findById(updateAgendamentoDto.id);
 
-        // 🔒 TRAVA DE SEGURANÇA: Se houver tentativa de mudar o status e quem pediu for 'cliente', barra o processo.
+        // 1. 🔒 TRAVA DE MUDANÇA DE STATUS:
         if (updateAgendamentoDto.status && updateAgendamentoDto.status !== agendamento.status) {
+            // Clientes nunca alteram status
             if (usuarioLogado.tipo === 'cliente') {
                 throw new HttpException(
                     'Clientes não têm permissão para alterar o status de um agendamento!', 
                     HttpStatus.FORBIDDEN
                 );
             }
+            
+            // Empreendedores só mudam o status se o serviço for deles
+            if (usuarioLogado.tipo === 'empreendedor' && agendamento.servico?.usuario?.id !== usuarioLogado.id) {
+                throw new HttpException(
+                    'Você só pode alterar o status de agendamentos pertencentes aos seus próprios serviços!', 
+                    HttpStatus.FORBIDDEN
+                );
+            }
+            
             agendamento.status = updateAgendamentoDto.status;
+        }
+
+        // 2. 🔒 TRAVA PARA EDIÇÃO DE OUTROS DADOS (Horário/Serviço/etc):
+        // Garante que o usuário mexendo no agendamento é o cliente dono dele OU o prestador dono do serviço.
+        const éOClienteDono = agendamento.usuario?.id === usuarioLogado.id;
+        const éOPrestadorDono = agendamento.servico?.usuario?.id === usuarioLogado.id;
+
+        if (!éOClienteDono && !éOPrestadorDono) {
+            throw new HttpException(
+                'Você não possui autorização para modificar este agendamento!', 
+                HttpStatus.FORBIDDEN
+            );
         }
 
         if (updateAgendamentoDto.start_time) {
@@ -105,13 +127,19 @@ export class AgendamentoService {
 
         if (updateAgendamentoDto.servicoId) {
             const servico = await this.servicosRepository.findOne({
-                where: { id: updateAgendamentoDto.servicoId }
+                where: { id: updateAgendamentoDto.servicoId },
+                relations: { usuario: true }
             });
             if (!servico) {
                 throw new HttpException('Serviço não encontrado!', HttpStatus.NOT_FOUND);
             }
+            
+            // Segurança extra: Se um cliente tentar trocar o serviço na edição, o novo serviço também deve ser do mesmo profissional
+            if (usuarioLogado.tipo === 'empreendedor' && servico.usuario?.id !== usuarioLogado.id) {
+                throw new HttpException('Você não pode associar um serviço de terceiros a este agendamento!', HttpStatus.FORBIDDEN);
+            }
+
             agendamento.servico = servico;
-            // Recalcular end_time baseado na nova duração do serviço
             agendamento.end_time = new Date(agendamento.start_time.getTime() + servico.duracao_minutos * 60000);
         }
 
@@ -129,6 +157,24 @@ export class AgendamentoService {
         await this.ensureNoTimeConflict(agendamento);
 
         return await this.agendamentoRepository.save(agendamento);
+    }
+
+    // 🛠️ MÉTODO DELETE ATUALIZADO COM VALIDAÇÃO DE PROPRIEDADE (OWNERSHIP):
+    async delete(id: number, usuarioLogado: any): Promise<DeleteResult> {
+        const agendamento = await this.findById(id);
+
+        const éOClienteDono = agendamento.usuario?.id === usuarioLogado.id;
+        const éOPrestadorDono = agendamento.servico?.usuario?.id === usuarioLogado.id;
+
+        // 🔒 TRAVA DE SEGURANÇA: Só deleta/cancela quem está envolvido no agendamento
+        if (!éOClienteDono && !éOPrestadorDono) {
+            throw new HttpException(
+                'Você não tem permissão para cancelar ou excluir este agendamento!', 
+                HttpStatus.FORBIDDEN
+            );
+        }
+
+        return await this.agendamentoRepository.delete(id);
     }
 
     private validateAgendamentoDates(agendamento: Agendamento): void {
@@ -154,14 +200,6 @@ export class AgendamentoService {
 
         if (conflict)
             throw new HttpException('Já existe um agendamento conflituoso para este usuário neste período.', HttpStatus.BAD_REQUEST);
-    }
-
-    async delete(id: number): Promise<DeleteResult> {
-        let buscarAgendamento = await this.findById(id);
-        if (!buscarAgendamento)
-            throw new HttpException('Agendamento não encontrado!', HttpStatus.NOT_FOUND);
-
-        return await this.agendamentoRepository.delete(id);
     }
 
     async buscarHorariosDisponiveis(servicoId: number, dataValida: string) {

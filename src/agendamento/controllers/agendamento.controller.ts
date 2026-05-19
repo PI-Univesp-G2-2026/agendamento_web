@@ -54,7 +54,7 @@ export class AgendamentoController {
 
   @Delete('/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  delete(@Param('id') id: number): Promise<DeleteResult> {
-      return this.agendamentoService.delete(id);
+  delete(@Param('id') id: number, @Req() req: any): Promise<DeleteResult> {
+      return this.agendamentoService.delete(id, req.user);
   }
 }
