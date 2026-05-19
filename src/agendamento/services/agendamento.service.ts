@@ -83,23 +83,36 @@ export class AgendamentoService {
 
     // 🛠️ MÉTODO UPDATE CORRIGIDO E DEFASADO DE ERROS DE ANINHAMENTO (QueryBuilder Direto):
     async update(updateAgendamentoDto: UpdateAgendamentoDto, usuarioLogado: any): Promise<Agendamento> {
-        // 1. Carrega o agendamento original usando o ID limpo
-        const agendamento = await this.findById(updateAgendamentoDto.id);
+        // 1. Busca o agendamento de forma crua (apenas para garantir que ele existe)
+        const agendamento = await this.agendamentoRepository.findOne({
+            where: { id: updateAgendamentoDto.id },
+            relations: ['servico', 'usuario'] // Traz apenas o primeiro nível de relação
+        });
+
+        if (!agendamento) {
+            throw new HttpException('Agendamento não encontrado!', HttpStatus.NOT_FOUND);
+        }
+
         const idUsuarioLogado = usuarioLogado.id || usuarioLogado.sub;
 
-        // 2. 🚀 QUERY ULTRA ROBUSTA: Busca os donos direto das chaves estrangeiras no banco
-        const dadosControle = await this.agendamentoRepository
-            .createQueryBuilder('agendamento')
-            .innerJoinAndSelect('agendamento.servico', 'servico')
-            .innerJoinAndSelect('servico.usuario', 'profissional')
-            .innerJoinAndSelect('agendamento.usuario', 'cliente')
-            .where('agendamento.id = :id', { id: agendamento.id })
-            .getOne();
+        // 2. 🚀 RESOLUÇÃO DO 403: Busca o serviço diretamente do banco para capturar o ID do profissional
+        const servicoDoBanco = await this.servicosRepository.findOne({
+            where: { id: agendamento.servico.id },
+            relations: ['usuario'] // Força trazer o usuário (profissional) dono deste serviço
+        });
 
-        const idProfissionalDono = dadosControle?.servico?.usuario?.id;
-        const idClienteDono = dadosControle?.usuario?.id;
+        // 3. Captura os IDs reais de quem é dono do que (Garante fallback caso o objeto venha mapeado de outra forma)
+        const idProfissionalDono = servicoDoBanco?.usuario?.id;
+        const idClienteDono = agendamento.usuario?.id;
 
-        // 3. 🔒 TRAVA 1: MUDANÇA DE STATUS (Apenas o prestador do serviço pode alterar)
+        if (!idProfissionalDono || !idClienteDono) {
+            throw new HttpException(
+                'Erro interno ao mapear as permissões de posse do agendamento.', 
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+
+        // 4. 🔒 TRAVA 1: VALIDAÇÃO DE MUDANÇA DE STATUS (Apenas o profissional dono do serviço pode alterar)
         if (updateAgendamentoDto.status && updateAgendamentoDto.status !== agendamento.status) {
             if (usuarioLogado.tipo === 'cliente') {
                 throw new HttpException(
@@ -118,7 +131,7 @@ export class AgendamentoService {
             agendamento.status = updateAgendamentoDto.status;
         }
 
-        // 4. 🔒 TRAVA 2: AUTORIZAÇÃO DE MODIFICAÇÃO GERAL
+        // 5. 🔒 TRAVA 2: AUTORIZAÇÃO DE MODIFICAÇÃO GERAL (Garante que só o cliente envolvido OU o profissional envolvido mexem)
         const éOClienteDono = Number(idClienteDono) === Number(idUsuarioLogado);
         const éOPrestadorDono = Number(idProfissionalDono) === Number(idUsuarioLogado);
 
@@ -129,41 +142,42 @@ export class AgendamentoService {
             );
         }
 
-        // 5. Aplica as mutações permitidas
+        // 6. Se passou pelas travas, aplica as alterações de data e horário solicitadas
         if (updateAgendamentoDto.start_time) {
             agendamento.start_time = new Date(updateAgendamentoDto.start_time);
         }
 
         if (updateAgendamentoDto.servicoId) {
-            const servico = await this.servicosRepository.findOne({
+            const novoServico = await this.servicosRepository.findOne({
                 where: { id: updateAgendamentoDto.servicoId },
-                relations: { usuario: true }
+                relations: ['usuario']
             });
-            if (!servico) {
+            if (!novoServico) {
                 throw new HttpException('Serviço não encontrado!', HttpStatus.NOT_FOUND);
             }
             
-            if (usuarioLogado.tipo === 'empreendedor' && Number(servico.usuario?.id) !== Number(idUsuarioLogado)) {
+            if (usuarioLogado.tipo === 'empreendedor' && Number(novoServico.usuario?.id) !== Number(idUsuarioLogado)) {
                 throw new HttpException('Você não pode associar um serviço de terceiros a este agendamento!', HttpStatus.FORBIDDEN);
             }
 
-            agendamento.servico = servico;
-            agendamento.end_time = new Date(agendamento.start_time.getTime() + servico.duracao_minutos * 60000);
+            agendamento.servico = novoServico;
+            agendamento.end_time = new Date(agendamento.start_time.getTime() + novoServico.duracao_minutos * 60000);
         }
 
         if (updateAgendamentoDto.usuarioId) {
-            const usuario = await this.usuariosRepository.findOne({
+            const novoUsuarioCliente = await this.usuariosRepository.findOne({
                 where: { id: updateAgendamentoDto.usuarioId }
             });
-            if (!usuario) {
+            if (!novoUsuarioCliente) {
                 throw new HttpException('Usuário não encontrado!', HttpStatus.NOT_FOUND);
             }
-            agendamento.usuario = usuario;
+            agendamento.usuario = novoUsuarioCliente;
         }
 
         this.validateAgendamentoDates(agendamento);
         await this.ensureNoTimeConflict(agendamento);
 
+        // Salva o objeto atualizado
         return await this.agendamentoRepository.save(agendamento);
     }
 
