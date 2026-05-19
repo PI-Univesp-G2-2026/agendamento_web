@@ -41,14 +41,18 @@ export class AgendamentoController {
       return this.agendamentoService.create(createAgendamentoDto);
   }
 
-  // 🛠️ MÉTODO UPDATE ATUALIZADO:
-  @Put()
+  
+  @Put('/:id') 
   @HttpCode(HttpStatus.OK)
   update(
+    @Param('id') id: number, 
     @Body() updateAgendamentoDto: UpdateAgendamentoDto,
-    @Req() req: any // 👈 Injeta a requisição HTTP aqui
+    @Req() req: any 
   ): Promise<Agendamento> {
-      // Passa o DTO e o payload do usuário autenticado (req.user) para o Service realizar a validação por tipo
+
+    updateAgendamentoDto.id = Number(id);
+      
+      // Envia para o Service rodar a validação de posse (ownership) por tipo de usuário
       return this.agendamentoService.update(updateAgendamentoDto, req.user);
   }
 
