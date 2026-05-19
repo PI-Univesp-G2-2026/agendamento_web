@@ -36,6 +36,6 @@ export class Usuarios {
     agendamentos!: Agendamento[]
 
     @ApiProperty({ type: () => Servicos, isArray: true })
-    @OneToMany(() => Servicos, (servico) => servico.usuario)
-    servicos!: Servicos[]
+    @OneToMany(() => Servicos, (servico) => servico.usuario) 
+    servicos!: Servicos[];
 }

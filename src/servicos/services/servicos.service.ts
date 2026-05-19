@@ -13,7 +13,9 @@ export class ServicosService {
     ) { }
 
     async findAll(): Promise<Servicos[]> {
-        return await this.servicosRepository.find();
+        return await this.servicosRepository.find({
+            relations: { usuario: true },
+        });
     }
 
 
@@ -22,6 +24,7 @@ export class ServicosService {
             where: {
                 id
             },
+            relations: { usuario: true },
         });
 
         if (!servicos)
@@ -35,6 +38,7 @@ export class ServicosService {
             where: {
                 nome: ILike(`%${nome}%`)
             },
+            relations: { usuario: true },
         });
     }
 
