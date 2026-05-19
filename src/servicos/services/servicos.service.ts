@@ -63,8 +63,23 @@ export class ServicosService {
     async update(updateServicosDto: UpdateServicosDto, usuarioLogado: any): Promise<Servicos> {
         const servico = await this.findById(updateServicosDto.id);
 
-        // 🔒 TRAVA DE SEGURANÇA: Impede que um empreendedor mude o serviço de outro
-        if (!servico.usuario || servico.usuario.id !== usuarioLogado.id) {
+        // Captura a credencial do token (e-mail)
+        const credencialToken = usuarioLogado?.id || usuarioLogado?.sub || usuarioLogado?.email;
+        let idUsuarioLogado: number = 0;
+
+        // Se o token entregar o e-mail, busca o id numérico correspondente no banco
+        if (credencialToken && typeof credencialToken === 'string' && credencialToken.includes('@')) {
+            const usuarioDoBanco = await this.usuariosRepository.findOne({
+                where: { email: credencialToken } 
+            });
+            if (usuarioDoBanco) {
+                idUsuarioLogado = usuarioDoBanco.id;
+            }
+        } else {
+            idUsuarioLogado = Number(credencialToken);
+        }
+
+        if (!servico.usuario || Number(servico.usuario.id) !== Number(idUsuarioLogado)) {
             throw new HttpException(
                 'Você não tem permissão para alterar um serviço que não pertence ao seu catálogo!', 
                 HttpStatus.FORBIDDEN
@@ -95,8 +110,22 @@ export class ServicosService {
     async delete(id: number, usuarioLogado: any): Promise<DeleteResult> {
         const servico = await this.findById(id);
         
-        // 🔒 TRAVA DE SEGURANÇA: Impede que um empreendedor remova o serviço de outro
-        if (!servico.usuario || servico.usuario.id !== usuarioLogado.id) {
+        // Captura a credencial do token (e-mail)
+        const credencialToken = usuarioLogado?.id || usuarioLogado?.sub || usuarioLogado?.email;
+        let idUsuarioLogado: number = 0;
+
+        if (credencialToken && typeof credencialToken === 'string' && credencialToken.includes('@')) {
+            const usuarioDoBanco = await this.usuariosRepository.findOne({
+                where: { email: credencialToken } 
+            });
+            if (usuarioDoBanco) {
+                idUsuarioLogado = usuarioDoBanco.id;
+            }
+        } else {
+            idUsuarioLogado = Number(credencialToken);
+        }
+
+        if (!servico.usuario || Number(servico.usuario.id) !== Number(idUsuarioLogado)) {
             throw new HttpException(
                 'Você não tem permissão para excluir um serviço que não pertence ao seu catálogo!', 
                 HttpStatus.FORBIDDEN

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, UseGuards, Req } from "@nestjs/common"; // 👈 Certifique-se de que o 'Req' está importado aqui
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, UseGuards, Req } from "@nestjs/common";
 import { Servicos } from "../entities/servicos.entity";
 import { ServicosService } from "../services/servicos.service";
 import { CreateServicosDto } from "../dto/create-servicos.dto";
@@ -39,24 +39,22 @@ export class ServicosController {
       return this.servicosService.create(createServicosDto);
   }
   
-  // 🛠️ MÉTODO UPDATE ATUALIZADO: Passa o usuário logado para validar se ele é o dono do serviço
+  // 🛠️ MÉTODO UPDATE: Passando o req.user corretamente para o service
   @Put()
   @HttpCode(HttpStatus.OK)
   update(
     @Body() updateServicosDto: UpdateServicosDto,
-    @Req() req: any // 👈 Injeta a requisição HTTP
+    @Req() req: any 
   ): Promise<Servicos> {
       return this.servicosService.update(updateServicosDto, req.user);
   }
   
-  // 🛠️ MÉTODO DELETE ATUALIZADO: Passa o usuário logado para validar a exclusão
   @Delete('/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   delete(
     @Param('id') id: number,
-    @Req() req: any // 👈 Injeta a requisição HTTP
+    @Req() req: any 
   ): Promise<DeleteResult> {
       return this.servicosService.delete(id, req.user);
   }
-
 }

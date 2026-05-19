@@ -41,9 +41,13 @@ export class UsuariosController {
     }
 
     @UseGuards(JwtAuthGuard)
-    @Put()
+    @Put('/:id') 
     @HttpCode(HttpStatus.OK)
-    update(@Body() updateUsuariosDto: UpdateUsuariosDto): Promise<Usuarios> {
+    update(
+        @Param('id') id: number, 
+        @Body() updateUsuariosDto: UpdateUsuariosDto
+    ): Promise<Usuarios> {
+        updateUsuariosDto.id = Number(id); 
         return this.usuariosService.update(updateUsuariosDto);
     }
 
