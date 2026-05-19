@@ -81,114 +81,119 @@ export class AgendamentoService {
         return await this.agendamentoRepository.save(novoAgendamento);
     }
 
-    // 🛠️ MÉTODO UPDATE CORRIGIDO E DEFASADO DE ERROS DE ANINHAMENTO (QueryBuilder Direto):
     async update(updateAgendamentoDto: UpdateAgendamentoDto, usuarioLogado: any): Promise<Agendamento> {
-    // 1. Busca o agendamento de forma crua (apenas para garantir que ele existe)
-    const agendamento = await this.agendamentoRepository.findOne({
-        where: { id: updateAgendamentoDto.id },
-        relations: ['servico', 'usuario'] // Traz apenas o primeiro nível de relação
-    });
+        // 1. Carrega o agendamento original
+        const agendamento = await this.agendamentoRepository.findOne({
+            where: { id: updateAgendamentoDto.id },
+            relations: ['servico', 'usuario']
+        });
 
-    if (!agendamento) {
-        throw new HttpException('Agendamento não encontrado!', HttpStatus.NOT_FOUND);
-    }
+        if (!agendamento) {
+            throw new HttpException('Agendamento não encontrado!', HttpStatus.NOT_FOUND);
+        }
 
-    // Mapeamento amplo do ID do token JWT para evitar furos de tipagem
-    const idUsuarioLogado = usuarioLogado?.id || usuarioLogado?.sub || usuarioLogado?.user?.id;
+        // 2. Captura a credencial do token (que descobrimos ser o e-mail)
+        const credencialToken = usuarioLogado?.id || usuarioLogado?.sub || usuarioLogado?.email;
+        
+        let idUsuarioLogado: number = 0;
+        let tipoUsuarioLogado: string = usuarioLogado?.tipo;
 
-    // 2. Busca o serviço diretamente do banco para capturar o ID do profissional
-    const servicoDoBanco = await this.servicosRepository.findOne({
-        where: { id: agendamento.servico.id },
-        relations: ['usuario'] 
-    });
+        if (credencialToken && typeof credencialToken === 'string' && credencialToken.includes('@')) {
+            const usuarioDoBanco = await this.usuariosRepository.findOne({
+                where: { email: credencialToken } 
+            });
+            if (usuarioDoBanco) {
+                idUsuarioLogado = usuarioDoBanco.id;
+                tipoUsuarioLogado = usuarioDoBanco.tipo; // Recupera o tipo correto se estiver vindo undefined no token
+            }
+        } else {
+            idUsuarioLogado = Number(credencialToken);
+        }
 
-    // 3. Captura os IDs reais de quem é dono do que 
-    const idProfissionalDono = servicoDoBanco?.usuario?.id;
-    const idClienteDono = agendamento.usuario?.id;
+        // 3. Busca o serviço diretamente do banco para capturar o ID do profissional
+        const servicoDoBanco = await this.servicosRepository.findOne({
+            where: { id: agendamento.servico.id },
+            relations: ['usuario'] 
+        });
 
-    // 🚨 PAINEL DE DIAGNÓSTICO: Verifique o terminal do Render ou do VS Code ao rodar a rota
-    console.log("\n=== 🔍 DIAGNÓSTICO DE SEGURANÇA AGENDAMENTOS ===");
-    console.log("-> ID do Usuário Logado (Token):", idUsuarioLogado, `[Tipo: ${typeof idUsuarioLogado}]`);
-    console.log("-> Perfil do Usuário Logado (Token):", usuarioLogado?.tipo);
-    console.log("-> ID do Profissional (Dono do Serviço):", idProfissionalDono, `[Tipo: ${typeof idProfissionalDono}]`);
-    console.log("-> ID do Cliente (Dono do Agendamento):", idClienteDono, `[Tipo: ${typeof idClienteDono}]`);
-    console.log("================================================\n");
+        const idProfissionalDono = servicoDoBanco?.usuario?.id;
+        const idClienteDono = agendamento.usuario?.id;
 
-    if (!idProfissionalDono || !idClienteDono) {
-        throw new HttpException(
-            'Erro interno ao mapear as permissões de posse do agendamento.', 
-            HttpStatus.INTERNAL_SERVER_ERROR
-        );
-    }
-
-    // 4. 🔒 TRAVA 1: VALIDAÇÃO DE MUDANÇA DE STATUS 
-    if (updateAgendamentoDto.status && updateAgendamentoDto.status !== agendamento.status) {
-        if (usuarioLogado.tipo === 'cliente') {
+        if (!idProfissionalDono || !idClienteDono) {
             throw new HttpException(
-                'Clientes não têm permissão para alterar o status de um agendamento!', 
+                'Erro interno ao mapear as permissões de posse do agendamento.', 
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+
+        // 4. TRAVA 1: VALIDAÇÃO DE MUDANÇA DE STATUS
+        if (updateAgendamentoDto.status && updateAgendamentoDto.status !== agendamento.status) {
+            if (tipoUsuarioLogado === 'cliente') {
+                throw new HttpException(
+                    'Clientes não têm permissão para alterar o status de um agendamento!', 
+                    HttpStatus.FORBIDDEN
+                );
+            }
+            
+            if (tipoUsuarioLogado === 'empreendedor' && Number(idProfissionalDono) !== Number(idUsuarioLogado)) {
+                throw new HttpException(
+                    'Você só pode alterar o status de agendamentos pertencentes aos seus próprios serviços!', 
+                    HttpStatus.FORBIDDEN
+                );
+            }
+            
+            agendamento.status = updateAgendamentoDto.status;
+        }
+
+        // 5. TRAVA 2: AUTORIZAÇÃO DE MODIFICAÇÃO GERAL
+        const éOClienteDono = Number(idClienteDono) === Number(idUsuarioLogado);
+        const éOPrestadorDono = Number(idProfissionalDono) === Number(idUsuarioLogado);
+
+        if (!éOClienteDono && !éOPrestadorDono) {
+            throw new HttpException(
+                'Você não possui autorização para modificar este agendamento!', 
                 HttpStatus.FORBIDDEN
             );
         }
-        
-        if (usuarioLogado.tipo === 'empreendedor' && Number(idProfissionalDono) !== Number(idUsuarioLogado)) {
-            throw new HttpException(
-                'Você só pode alterar o status de agendamentos pertencentes aos seus próprios serviços!', 
-                HttpStatus.FORBIDDEN
-            );
-        }
-        
-        agendamento.status = updateAgendamentoDto.status;
-    }
 
-    // 5. 🔒 TRAVA 2: AUTORIZAÇÃO DE MODIFICAÇÃO GERAL
-    const éOClienteDono = Number(idClienteDono) === Number(idUsuarioLogado);
-    const éOPrestadorDono = Number(idProfissionalDono) === Number(idUsuarioLogado);
-
-    if (!éOClienteDono && !éOPrestadorDono) {
-        throw new HttpException(
-            'Você não possui autorização para modificar este agendamento!', 
-            HttpStatus.FORBIDDEN
-        );
-    }
-
-    // 6. Se passou pelas travas, aplica as alterações de data e horário solicitadas
-    if (updateAgendamentoDto.start_time) {
-        agendamento.start_time = new Date(updateAgendamentoDto.start_time);
-    }
-
-    if (updateAgendamentoDto.servicoId) {
-        const novoServico = await this.servicosRepository.findOne({
-            where: { id: updateAgendamentoDto.servicoId },
-            relations: ['usuario']
-        });
-        if (!novoServico) {
-            throw new HttpException('Serviço não encontrado!', HttpStatus.NOT_FOUND);
-        }
-        
-        if (usuarioLogado.tipo === 'empreendedor' && Number(novoServico.usuario?.id) !== Number(idUsuarioLogado)) {
-            throw new HttpException('Você não pode associar um serviço de terceiros a este agendamento!', HttpStatus.FORBIDDEN);
+        // 6. Aplica as alterações de data e horário solicitadas
+        if (updateAgendamentoDto.start_time) {
+            agendamento.start_time = new Date(updateAgendamentoDto.start_time);
         }
 
-        agendamento.servico = novoServico;
-        agendamento.end_time = new Date(agendamento.start_time.getTime() + novoServico.duracao_minutos * 60000);
-    }
+        if (updateAgendamentoDto.servicoId) {
+            const novoServico = await this.servicosRepository.findOne({
+                where: { id: updateAgendamentoDto.servicoId },
+                relations: ['usuario']
+            });
+            if (!novoServico) {
+                throw new HttpException('Serviço não encontrado!', HttpStatus.NOT_FOUND);
+            }
+            
+            if (tipoUsuarioLogado === 'empreendedor' && Number(novoServico.usuario?.id) !== Number(idUsuarioLogado)) {
+                throw new HttpException('Você não pode associar um serviço de terceiros a este agendamento!', HttpStatus.FORBIDDEN);
+            }
 
-    if (updateAgendamentoDto.usuarioId) {
-        const novoUsuarioCliente = await this.usuariosRepository.findOne({
-            where: { id: updateAgendamentoDto.usuarioId }
-        });
-        if (!novoUsuarioCliente) {
-            throw new HttpException('Usuário não encontrado!', HttpStatus.NOT_FOUND);
+            agendamento.servico = novoServico;
+            agendamento.end_time = new Date(agendamento.start_time.getTime() + novoServico.duracao_minutos * 60000);
         }
-        agendamento.usuario = novoUsuarioCliente;
+
+        if (updateAgendamentoDto.usuarioId) {
+            const novoUsuarioCliente = await this.usuariosRepository.findOne({
+                where: { id: updateAgendamentoDto.usuarioId }
+            });
+            if (!novoUsuarioCliente) {
+                throw new HttpException('Usuário não encontrado!', HttpStatus.NOT_FOUND);
+            }
+            agendamento.usuario = novoUsuarioCliente;
+        }
+
+        this.validateAgendamentoDates(agendamento);
+        await this.ensureNoTimeConflict(agendamento);
+
+        return await this.agendamentoRepository.save(agendamento);
     }
 
-    this.validateAgendamentoDates(agendamento);
-    await this.ensureNoTimeConflict(agendamento);
-
-    // Salva o objeto atualizado
-    return await this.agendamentoRepository.save(agendamento);
-}
     async delete(id: number, usuarioLogado: any): Promise<DeleteResult> {
         const agendamento = await this.findById(id);
         const idUsuarioLogado = usuarioLogado.id || usuarioLogado.sub;
