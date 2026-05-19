@@ -31,7 +31,6 @@ export class AgendamentoService {
         });
     }
 
-    // 🛠️ ATUALIZADO: Usando array de relações lineares para garantir o join completo do TypeORM
     async findById(id: number): Promise<Agendamento> {
         let agendamento = await this.agendamentoRepository.findOne({
             where: { id },
@@ -82,11 +81,25 @@ export class AgendamentoService {
         return await this.agendamentoRepository.save(novoAgendamento);
     }
 
+    // 🛠️ MÉTODO UPDATE CORRIGIDO E DEFASADO DE ERROS DE ANINHAMENTO (QueryBuilder Direto):
     async update(updateAgendamentoDto: UpdateAgendamentoDto, usuarioLogado: any): Promise<Agendamento> {
+        // 1. Carrega o agendamento original usando o ID limpo
         const agendamento = await this.findById(updateAgendamentoDto.id);
         const idUsuarioLogado = usuarioLogado.id || usuarioLogado.sub;
 
-        // 1. TRAVA DE MUDANÇA DE STATUS:
+        // 2. 🚀 QUERY ULTRA ROBUSTA: Busca os donos direto das chaves estrangeiras no banco
+        const dadosControle = await this.agendamentoRepository
+            .createQueryBuilder('agendamento')
+            .innerJoinAndSelect('agendamento.servico', 'servico')
+            .innerJoinAndSelect('servico.usuario', 'profissional')
+            .innerJoinAndSelect('agendamento.usuario', 'cliente')
+            .where('agendamento.id = :id', { id: agendamento.id })
+            .getOne();
+
+        const idProfissionalDono = dadosControle?.servico?.usuario?.id;
+        const idClienteDono = dadosControle?.usuario?.id;
+
+        // 3. 🔒 TRAVA 1: MUDANÇA DE STATUS (Apenas o prestador do serviço pode alterar)
         if (updateAgendamentoDto.status && updateAgendamentoDto.status !== agendamento.status) {
             if (usuarioLogado.tipo === 'cliente') {
                 throw new HttpException(
@@ -95,35 +108,19 @@ export class AgendamentoService {
                 );
             }
             
-            if (usuarioLogado.tipo === 'empreendedor') {
-                // 🚀 GARANTIA TOTAL: Busca o serviço diretamente na tabela de Serviços para cruzar o dono legítimo
-                const servicoDoBanco = await this.servicosRepository.findOne({
-                    where: { id: agendamento.servico.id },
-                    relations: { usuario: true }
-                });
-
-                const idDonoDoServico = servicoDoBanco?.usuario?.id;
-
-                if (!idDonoDoServico || Number(idDonoDoServico) !== Number(idUsuarioLogado)) {
-                    throw new HttpException(
-                        'Você só pode alterar o status de agendamentos pertencentes aos seus próprios serviços!', 
-                        HttpStatus.FORBIDDEN
-                    );
-                }
+            if (usuarioLogado.tipo === 'empreendedor' && Number(idProfissionalDono) !== Number(idUsuarioLogado)) {
+                throw new HttpException(
+                    'Você só pode alterar o status de agendamentos pertencentes aos seus próprios serviços!', 
+                    HttpStatus.FORBIDDEN
+                );
             }
             
             agendamento.status = updateAgendamentoDto.status;
         }
 
-        // 2. TRAVA PARA EDIÇÃO DE OUTROS DADOS (Horário/Serviço/etc):
-        // Força tratamento direto via repositório de serviços para o Empreendedor
-        const servicoDoBancoParaValidacao = await this.servicosRepository.findOne({
-            where: { id: agendamento.servico.id },
-            relations: { usuario: true }
-        });
-
-        const éOClienteDono = Number(agendamento.usuario?.id) === Number(idUsuarioLogado);
-        const éOPrestadorDono = Number(servicoDoBancoParaValidacao?.usuario?.id) === Number(idUsuarioLogado);
+        // 4. 🔒 TRAVA 2: AUTORIZAÇÃO DE MODIFICAÇÃO GERAL
+        const éOClienteDono = Number(idClienteDono) === Number(idUsuarioLogado);
+        const éOPrestadorDono = Number(idProfissionalDono) === Number(idUsuarioLogado);
 
         if (!éOClienteDono && !éOPrestadorDono) {
             throw new HttpException(
@@ -132,6 +129,7 @@ export class AgendamentoService {
             );
         }
 
+        // 5. Aplica as mutações permitidas
         if (updateAgendamentoDto.start_time) {
             agendamento.start_time = new Date(updateAgendamentoDto.start_time);
         }
@@ -173,13 +171,16 @@ export class AgendamentoService {
         const agendamento = await this.findById(id);
         const idUsuarioLogado = usuarioLogado.id || usuarioLogado.sub;
 
-        const servicoDoBanco = await this.servicosRepository.findOne({
-            where: { id: agendamento.servico.id },
-            relations: { usuario: true }
-        });
+        const dadosControle = await this.agendamentoRepository
+            .createQueryBuilder('agendamento')
+            .innerJoinAndSelect('agendamento.servico', 'servico')
+            .innerJoinAndSelect('servico.usuario', 'profissional')
+            .innerJoinAndSelect('agendamento.usuario', 'cliente')
+            .where('agendamento.id = :id', { id: agendamento.id })
+            .getOne();
 
-        const éOClienteDono = Number(agendamento.usuario?.id) === Number(idUsuarioLogado);
-        const éOPrestadorDono = Number(servicoDoBanco?.usuario?.id) === Number(idUsuarioLogado);
+        const éOClienteDono = Number(dadosControle?.usuario?.id) === Number(idUsuarioLogado);
+        const éOPrestadorDono = Number(dadosControle?.servico?.usuario?.id) === Number(idUsuarioLogado);
 
         if (!éOClienteDono && !éOPrestadorDono) {
             throw new HttpException(
