@@ -153,67 +153,60 @@ export class AgendamentoService {
     }
 
     async buscarHorariosDisponiveis(servicoId: number, dataValida: string) {
-    // 1. Busca o serviço para saber a duração em minutos
     const servico = await this.servicosRepository.findOne({ where: { id: servicoId } });
     if (!servico) {
       throw new NotFoundException('Serviço não encontrado');
     }
 
-    // 2. Define o início e o fim do dia selecionado para a query do MySQL
-    const inicioDoDia = new Date(`${dataValida}T00:00:00Z`);
-    const fimDoDia = new Date(`${dataValida}T23:59:59Z`);
+    // Garante que o fuso horário seja interpretado de forma isolada do fuso do servidor
+    const inicioDoDia = new Date(`${dataValida}T00:00:00.000Z`);
+    const fimDoDia = new Date(`${dataValida}T23:59:59.999Z`);
 
-    // 3. QUERY: Busca os agendamentos que já existem nesse dia e não estão cancelados
+    // AJUSTE NA QUERY: Mapeamento explícito da relação para o TypeORM gerar a query certa
     const agendamentosOcupados = await this.agendamentoRepository.find({
       where: {
-        servico: { id: servicoId },
+        servico: { id: servicoId }, 
         start_time: Between(inicioDoDia, fimDoDia),
-        status: Not('cancelado'), // Ignora horários de agendamentos cancelados
+        status: Not('cancelado'), 
       },
-      order: { start_time: 'ASC' },
     });
 
-    // 4. Cria a grade fixa de trabalho do microempreendedor (Ex: 08:00 às 18:00)
-    const horarioAbertura = 8; // 08:00h
-    const horarioFechamento = 18; // 18:00h
+    const horarioAbertura = 8; 
+    const horarioFechamento = 18; 
     
     const slotsDisponiveis: string[] = [];
-    const tempoAtual = new Date(inicioDoDia);
+    
+    // Cria instâncias independentes de data para evitar mutação indesejada de ponteiro
+    const tempoAtual = new Date(`${dataValida}T00:00:00.000Z`);
     tempoAtual.setUTCHours(horarioAbertura, 0, 0, 0);
 
-    const tempoLimite = new Date(inicioDoDia);
+    const tempoLimite = new Date(`${dataValida}T00:00:00.000Z`);
     tempoLimite.setUTCHours(horarioFechamento, 0, 0, 0);
 
-    // 5. Varre o dia de trabalho de acordo com a duração do serviço
     while (tempoAtual.getTime() + servico.duracao_minutos * 60000 <= tempoLimite.getTime()) {
-      const slotInicio = new Date(tempoAtual);
+      const slotInicio = new Date(tempoAtual.getTime());
       const slotFim = new Date(tempoAtual.getTime() + servico.duracao_minutos * 60000);
 
-      // Verifica se este slot colide com algum agendamento do banco de dados
       const temConflito = agendamentosOcupados.some(agendamento => {
         const agendamentoInicio = new Date(agendamento.start_time).getTime();
         const agendamentoFim = new Date(agendamento.end_time).getTime();
 
-        // Lógica de colisão de intervalos de tempo
         return (
           slotInicio.getTime() < agendamentoFim && 
           slotFim.getTime() > agendamentoInicio
         );
       });
 
-      // Se não houver conflito, formata a hora (HH:MM) e adiciona na lista
       if (!temConflito) {
         const horaFormatada = slotInicio.getUTCHours().toString().padStart(2, '0');
         const minutoFormatado = slotInicio.getUTCMinutes().toString().padStart(2, '0');
         slotsDisponiveis.push(`${horaFormatada}:${minutoFormatado}`);
       }
 
-      // Avança para a próxima janela de tempo (ex: de 30 em 30 minutos ou pela duração do serviço)
       tempoAtual.setTime(tempoAtual.getTime() + servico.duracao_minutos * 60000);
     }
 
     return slotsDisponiveis;
-  }
 }
 
-
+}

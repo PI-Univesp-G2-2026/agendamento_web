@@ -16,6 +16,13 @@ export class AgendamentoController {
   constructor(private readonly agendamentoService: AgendamentoService) { }
 
 
+  @Get('disponibilidade')
+  async pegarDisponibilidade(
+    @Query('servicoId') servicoId: number,
+    @Query('data') data: string, // Espera o formato YYYY-MM-DD
+  ) {
+    return this.agendamentoService.buscarHorariosDisponiveis(Number(servicoId), data);
+  }
   @Get()
   @HttpCode(HttpStatus.OK)
   findAll(): Promise<Agendamento[]> {
@@ -46,13 +53,7 @@ export class AgendamentoController {
       return this.agendamentoService.delete(id);
   }
 
-  @Get('disponibilidade')
-  async pegarDisponibilidade(
-    @Query('servicoId') servicoId: number,
-    @Query('data') data: string, // Espera o formato YYYY-MM-DD
-  ) {
-    return this.agendamentoService.buscarHorariosDisponiveis(Number(servicoId), data);
-  }
+  
 
 }
 
