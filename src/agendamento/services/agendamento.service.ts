@@ -24,7 +24,9 @@ export class AgendamentoService {
         return await this.agendamentoRepository.find({
             relations: {
                 usuario: true,
-                servico: true
+                servico: {
+                    usuario: true
+                }
             }
         });
     }
@@ -36,7 +38,9 @@ export class AgendamentoService {
             },
             relations:{
                 usuario: true,
-                servico: true
+                servico: {
+                    usuario: true
+                }
             }
         });
 
