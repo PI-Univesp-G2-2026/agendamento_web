@@ -195,29 +195,54 @@ export class AgendamentoService {
     }
 
     async delete(id: number, usuarioLogado: any): Promise<DeleteResult> {
-        const agendamento = await this.findById(id);
-        const idUsuarioLogado = usuarioLogado.id || usuarioLogado.sub;
+    // 1. Busca o agendamento original de forma crua
+    const agendamento = await this.agendamentoRepository.findOne({
+        where: { id },
+        relations: ['servico', 'usuario'] // Traz apenas o primeiro nível de relação
+    });
 
-        const dadosControle = await this.agendamentoRepository
-            .createQueryBuilder('agendamento')
-            .innerJoinAndSelect('agendamento.servico', 'servico')
-            .innerJoinAndSelect('servico.usuario', 'profissional')
-            .innerJoinAndSelect('agendamento.usuario', 'cliente')
-            .where('agendamento.id = :id', { id: agendamento.id })
-            .getOne();
-
-        const éOClienteDono = Number(dadosControle?.usuario?.id) === Number(idUsuarioLogado);
-        const éOPrestadorDono = Number(dadosControle?.servico?.usuario?.id) === Number(idUsuarioLogado);
-
-        if (!éOClienteDono && !éOPrestadorDono) {
-            throw new HttpException(
-                'Você não tem permissão para cancelar ou excluir este agendamento!', 
-                HttpStatus.FORBIDDEN
-            );
-        }
-
-        return await this.agendamentoRepository.delete(id);
+    if (!agendamento) {
+        throw new HttpException('Agendamento não encontrado!', HttpStatus.NOT_FOUND);
     }
+
+    // 2. Captura a credencial do token (e-mail)
+    const credencialToken = usuarioLogado?.id || usuarioLogado?.sub || usuarioLogado?.email;
+    
+    let idUsuarioLogado: number = 0;
+
+    // TRATAMENTO DO TOKEN: Se for e-mail, busca o ID numérico real dele na tabela de Usuários
+    if (credencialToken && typeof credencialToken === 'string' && credencialToken.includes('@')) {
+        const usuarioDoBanco = await this.usuariosRepository.findOne({
+            where: { email: credencialToken } 
+        });
+        if (usuarioDoBanco) {
+            idUsuarioLogado = usuarioDoBanco.id;
+        }
+    } else {
+        idUsuarioLogado = Number(credencialToken);
+    }
+
+    // 3. Busca o serviço de forma isolada para capturar o ID do profissional sem erro do ORM
+    const servicoDoBanco = await this.servicosRepository.findOne({
+        where: { id: agendamento.servico.id },
+        relations: ['usuario']
+    });
+
+    // 4. Mapeia os donos reais comparando com números puros
+    const éOClienteDono = Number(agendamento.usuario?.id) === Number(idUsuarioLogado);
+    const éOPrestadorDono = Number(servicoDoBanco?.usuario?.id) === Number(idUsuarioLogado);
+
+    // TRAVA DE SEGURANÇA: Só deleta quem está envolvido (Cliente ou o Profissional do serviço)
+    if (!éOClienteDono && !éOPrestadorDono) {
+        throw new HttpException(
+            'Você não tem permissão para cancelar ou excluir este agendamento!', 
+            HttpStatus.FORBIDDEN
+        );
+    }
+
+    // Executa a exclusão física no banco MySQL
+    return await this.agendamentoRepository.delete(id);
+}
 
     private validateAgendamentoDates(agendamento: Agendamento): void {
         if (!agendamento.start_time || !agendamento.end_time)
