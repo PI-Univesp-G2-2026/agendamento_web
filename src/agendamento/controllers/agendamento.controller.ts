@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { AgendamentoService } from "../services/agendamento.service";
 import { Agendamento } from "../entities/agendamento.entity";
 import { CreateAgendamentoDto } from "../dto/create-agendamento.dto";
@@ -45,5 +45,14 @@ export class AgendamentoController {
   delete(@Param('id') id: number): Promise<DeleteResult> {
       return this.agendamentoService.delete(id);
   }
+
+  @Get('disponibilidade')
+  async pegarDisponibilidade(
+    @Query('servicoId') servicoId: number,
+    @Query('data') data: string, // Espera o formato YYYY-MM-DD
+  ) {
+    return this.agendamentoService.buscarHorariosDisponiveis(Number(servicoId), data);
+  }
+
 }
 
