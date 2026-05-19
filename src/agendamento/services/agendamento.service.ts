@@ -84,15 +84,23 @@ export class AgendamentoService {
         return await this.agendamentoRepository.save(novoAgendamento);
     }
 
-    async update(updateAgendamentoDto: UpdateAgendamentoDto): Promise<Agendamento> {
+    // 🛠️ MÉTODO UPDATE ATUALIZADO COM A TRAVA DE SEGURANÇA POR TIPO DE USUÁRIO:
+    async update(updateAgendamentoDto: UpdateAgendamentoDto, usuarioLogado: any): Promise<Agendamento> {
         const agendamento = await this.findById(updateAgendamentoDto.id);
+
+        // 🔒 TRAVA DE SEGURANÇA: Se houver tentativa de mudar o status e quem pediu for 'cliente', barra o processo.
+        if (updateAgendamentoDto.status && updateAgendamentoDto.status !== agendamento.status) {
+            if (usuarioLogado.tipo === 'cliente') {
+                throw new HttpException(
+                    'Clientes não têm permissão para alterar o status de um agendamento!', 
+                    HttpStatus.FORBIDDEN
+                );
+            }
+            agendamento.status = updateAgendamentoDto.status;
+        }
 
         if (updateAgendamentoDto.start_time) {
             agendamento.start_time = new Date(updateAgendamentoDto.start_time);
-        }
-
-        if (updateAgendamentoDto.status) {
-            agendamento.status = updateAgendamentoDto.status;
         }
 
         if (updateAgendamentoDto.servicoId) {
@@ -157,60 +165,56 @@ export class AgendamentoService {
     }
 
     async buscarHorariosDisponiveis(servicoId: number, dataValida: string) {
-    const servico = await this.servicosRepository.findOne({ where: { id: servicoId } });
-    if (!servico) {
-      throw new NotFoundException('Serviço não encontrado');
+        const servico = await this.servicosRepository.findOne({ where: { id: servicoId } });
+        if (!servico) {
+            throw new NotFoundException('Serviço não encontrado');
+        }
+
+        const inicioDoDia = new Date(`${dataValida}T00:00:00.000Z`);
+        const fimDoDia = new Date(`${dataValida}T23:59:59.999Z`);
+
+        const agendamentosOcupados = await this.agendamentoRepository.find({
+            where: {
+                servico: { id: servicoId }, 
+                start_time: Between(inicioDoDia, fimDoDia),
+                status: Not('cancelado'), 
+            },
+        });
+
+        const horarioAbertura = 8; 
+        const horarioFechamento = 18; 
+        
+        const slotsDisponiveis: string[] = [];
+        
+        const tempoAtual = new Date(`${dataValida}T00:00:00.000Z`);
+        tempoAtual.setUTCHours(horarioAbertura, 0, 0, 0);
+
+        const tempoLimite = new Date(`${dataValida}T00:00:00.000Z`);
+        tempoLimite.setUTCHours(horarioFechamento, 0, 0, 0);
+
+        while (tempoAtual.getTime() + servico.duracao_minutos * 60000 <= tempoLimite.getTime()) {
+            const slotInicio = new Date(tempoAtual.getTime());
+            const slotFim = new Date(tempoAtual.getTime() + servico.duracao_minutos * 60000);
+
+            const temConflito = agendamentosOcupados.some(agendamento => {
+                const agendamentoInicio = new Date(agendamento.start_time).getTime();
+                const agendamentoFim = new Date(agendamento.end_time).getTime();
+
+                return (
+                    slotInicio.getTime() < agendamentoFim && 
+                    slotFim.getTime() > agendamentoInicio
+                );
+            });
+
+            if (!temConflito) {
+                const horaFormatada = slotInicio.getUTCHours().toString().padStart(2, '0');
+                const minutoFormatado = slotInicio.getUTCMinutes().toString().padStart(2, '0');
+                slotsDisponiveis.push(`${horaFormatada}:${minutoFormatado}`);
+            }
+
+            tempoAtual.setTime(tempoAtual.getTime() + servico.duracao_minutos * 60000);
+        }
+
+        return slotsDisponiveis;
     }
-
-    // Garante que o fuso horário seja interpretado de forma isolada do fuso do servidor
-    const inicioDoDia = new Date(`${dataValida}T00:00:00.000Z`);
-    const fimDoDia = new Date(`${dataValida}T23:59:59.999Z`);
-
-    // AJUSTE NA QUERY: Mapeamento explícito da relação para o TypeORM gerar a query certa
-    const agendamentosOcupados = await this.agendamentoRepository.find({
-      where: {
-        servico: { id: servicoId }, 
-        start_time: Between(inicioDoDia, fimDoDia),
-        status: Not('cancelado'), 
-      },
-    });
-
-    const horarioAbertura = 8; 
-    const horarioFechamento = 18; 
-    
-    const slotsDisponiveis: string[] = [];
-    
-    // Cria instâncias independentes de data para evitar mutação indesejada de ponteiro
-    const tempoAtual = new Date(`${dataValida}T00:00:00.000Z`);
-    tempoAtual.setUTCHours(horarioAbertura, 0, 0, 0);
-
-    const tempoLimite = new Date(`${dataValida}T00:00:00.000Z`);
-    tempoLimite.setUTCHours(horarioFechamento, 0, 0, 0);
-
-    while (tempoAtual.getTime() + servico.duracao_minutos * 60000 <= tempoLimite.getTime()) {
-      const slotInicio = new Date(tempoAtual.getTime());
-      const slotFim = new Date(tempoAtual.getTime() + servico.duracao_minutos * 60000);
-
-      const temConflito = agendamentosOcupados.some(agendamento => {
-        const agendamentoInicio = new Date(agendamento.start_time).getTime();
-        const agendamentoFim = new Date(agendamento.end_time).getTime();
-
-        return (
-          slotInicio.getTime() < agendamentoFim && 
-          slotFim.getTime() > agendamentoInicio
-        );
-      });
-
-      if (!temConflito) {
-        const horaFormatada = slotInicio.getUTCHours().toString().padStart(2, '0');
-        const minutoFormatado = slotInicio.getUTCMinutes().toString().padStart(2, '0');
-        slotsDisponiveis.push(`${horaFormatada}:${minutoFormatado}`);
-      }
-
-      tempoAtual.setTime(tempoAtual.getTime() + servico.duracao_minutos * 60000);
-    }
-
-    return slotsDisponiveis;
-}
-
 }

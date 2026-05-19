@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards, Req } from "@nestjs/common"; // 👈 Certifique-se de que o 'Req' foi adicionado aqui nos imports do @nestjs/common
 import { AgendamentoService } from "../services/agendamento.service";
 import { Agendamento } from "../entities/agendamento.entity";
 import { CreateAgendamentoDto } from "../dto/create-agendamento.dto";
@@ -15,7 +15,6 @@ import { ApiBearerAuth } from "@nestjs/swagger/dist/decorators/api-bearer.decora
 export class AgendamentoController {
   constructor(private readonly agendamentoService: AgendamentoService) { }
 
-
   @Get('disponibilidade')
   async pegarDisponibilidade(
     @Query('servicoId') servicoId: number,
@@ -23,6 +22,7 @@ export class AgendamentoController {
   ) {
     return this.agendamentoService.buscarHorariosDisponiveis(Number(servicoId), data);
   }
+
   @Get()
   @HttpCode(HttpStatus.OK)
   findAll(): Promise<Agendamento[]> {
@@ -41,10 +41,15 @@ export class AgendamentoController {
       return this.agendamentoService.create(createAgendamentoDto);
   }
 
+  // 🛠️ MÉTODO UPDATE ATUALIZADO:
   @Put()
   @HttpCode(HttpStatus.OK)
-  update(@Body() updateAgendamentoDto: UpdateAgendamentoDto): Promise<Agendamento> {
-      return this.agendamentoService.update(updateAgendamentoDto);
+  update(
+    @Body() updateAgendamentoDto: UpdateAgendamentoDto,
+    @Req() req: any // 👈 Injeta a requisição HTTP aqui
+  ): Promise<Agendamento> {
+      // Passa o DTO e o payload do usuário autenticado (req.user) para o Service realizar a validação por tipo
+      return this.agendamentoService.update(updateAgendamentoDto, req.user);
   }
 
   @Delete('/:id')
@@ -52,8 +57,4 @@ export class AgendamentoController {
   delete(@Param('id') id: number): Promise<DeleteResult> {
       return this.agendamentoService.delete(id);
   }
-
-  
-
 }
-
