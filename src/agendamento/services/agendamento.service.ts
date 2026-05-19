@@ -31,17 +31,15 @@ export class AgendamentoService {
         });
     }
 
+    // 🛠️ ATUALIZADO: Usando array de relações lineares para garantir o join completo do TypeORM
     async findById(id: number): Promise<Agendamento> {
         let agendamento = await this.agendamentoRepository.findOne({
-            where: {
-                id
-            },
-            relations:{
-                usuario: true,
-                servico: {
-                    usuario: true
-                }
-            }
+            where: { id },
+            relations: [
+                'usuario', 
+                'servico', 
+                'servico.usuario'
+            ]
         });
 
         if (!agendamento)
@@ -86,13 +84,10 @@ export class AgendamentoService {
 
     async update(updateAgendamentoDto: UpdateAgendamentoDto, usuarioLogado: any): Promise<Agendamento> {
         const agendamento = await this.findById(updateAgendamentoDto.id);
-
-        // Identifica com precisão o ID do usuário autenticado vindo do Token JWT (id ou sub)
         const idUsuarioLogado = usuarioLogado.id || usuarioLogado.sub;
 
         // 1. TRAVA DE MUDANÇA DE STATUS:
         if (updateAgendamentoDto.status && updateAgendamentoDto.status !== agendamento.status) {
-            // Clientes nunca alteram status
             if (usuarioLogado.tipo === 'cliente') {
                 throw new HttpException(
                     'Clientes não têm permissão para alterar o status de um agendamento!', 
@@ -100,21 +95,35 @@ export class AgendamentoService {
                 );
             }
             
-            // Empreendedores só mudam o status se o serviço for deles (Tratado com coerção numérica rigorosa)
-            if (usuarioLogado.tipo === 'empreendedor' && Number(agendamento.servico?.usuario?.id) !== Number(idUsuarioLogado)) {
-                throw new HttpException(
-                    'Você só pode alterar o status de agendamentos pertencentes aos seus próprios serviços!', 
-                    HttpStatus.FORBIDDEN
-                );
+            if (usuarioLogado.tipo === 'empreendedor') {
+                // 🚀 GARANTIA TOTAL: Busca o serviço diretamente na tabela de Serviços para cruzar o dono legítimo
+                const servicoDoBanco = await this.servicosRepository.findOne({
+                    where: { id: agendamento.servico.id },
+                    relations: { usuario: true }
+                });
+
+                const idDonoDoServico = servicoDoBanco?.usuario?.id;
+
+                if (!idDonoDoServico || Number(idDonoDoServico) !== Number(idUsuarioLogado)) {
+                    throw new HttpException(
+                        'Você só pode alterar o status de agendamentos pertencentes aos seus próprios serviços!', 
+                        HttpStatus.FORBIDDEN
+                    );
+                }
             }
             
             agendamento.status = updateAgendamentoDto.status;
         }
 
         // 2. TRAVA PARA EDIÇÃO DE OUTROS DADOS (Horário/Serviço/etc):
-        // Garante coerção numérica (Number) para evitar erros de comparação entre String e Number
+        // Força tratamento direto via repositório de serviços para o Empreendedor
+        const servicoDoBancoParaValidacao = await this.servicosRepository.findOne({
+            where: { id: agendamento.servico.id },
+            relations: { usuario: true }
+        });
+
         const éOClienteDono = Number(agendamento.usuario?.id) === Number(idUsuarioLogado);
-        const éOPrestadorDono = Number(agendamento.servico?.usuario?.id) === Number(idUsuarioLogado);
+        const éOPrestadorDono = Number(servicoDoBancoParaValidacao?.usuario?.id) === Number(idUsuarioLogado);
 
         if (!éOClienteDono && !éOPrestadorDono) {
             throw new HttpException(
@@ -136,7 +145,6 @@ export class AgendamentoService {
                 throw new HttpException('Serviço não encontrado!', HttpStatus.NOT_FOUND);
             }
             
-            // Segurança extra: Se for empreendedor, o novo serviço também deve ser da autoria dele
             if (usuarioLogado.tipo === 'empreendedor' && Number(servico.usuario?.id) !== Number(idUsuarioLogado)) {
                 throw new HttpException('Você não pode associar um serviço de terceiros a este agendamento!', HttpStatus.FORBIDDEN);
             }
@@ -161,15 +169,18 @@ export class AgendamentoService {
         return await this.agendamentoRepository.save(agendamento);
     }
 
-    // MÉTODO DELETE ATUALIZADO COM TRATAMENTO DE COMPARADOR DE NÚMERO:
     async delete(id: number, usuarioLogado: any): Promise<DeleteResult> {
         const agendamento = await this.findById(id);
         const idUsuarioLogado = usuarioLogado.id || usuarioLogado.sub;
 
-        const éOClienteDono = Number(agendamento.usuario?.id) === Number(idUsuarioLogado);
-        const éOPrestadorDono = Number(agendamento.servico?.usuario?.id) === Number(idUsuarioLogado);
+        const servicoDoBanco = await this.servicosRepository.findOne({
+            where: { id: agendamento.servico.id },
+            relations: { usuario: true }
+        });
 
-        // TRAVA DE SEGURANÇA: Só deleta/cancela quem está envolvido no agendamento
+        const éOClienteDono = Number(agendamento.usuario?.id) === Number(idUsuarioLogado);
+        const éOPrestadorDono = Number(servicoDoBanco?.usuario?.id) === Number(idUsuarioLogado);
+
         if (!éOClienteDono && !éOPrestadorDono) {
             throw new HttpException(
                 'Você não tem permissão para cancelar ou excluir este agendamento!', 
