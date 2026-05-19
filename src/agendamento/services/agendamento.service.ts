@@ -84,11 +84,13 @@ export class AgendamentoService {
         return await this.agendamentoRepository.save(novoAgendamento);
     }
 
-    // 🛠️ MÉTODO UPDATE ATUALIZADO COM AS DUAS TRAVAS DE SEGURANÇA (PERFIL E PROPRIEDADE):
     async update(updateAgendamentoDto: UpdateAgendamentoDto, usuarioLogado: any): Promise<Agendamento> {
         const agendamento = await this.findById(updateAgendamentoDto.id);
 
-        // 1. 🔒 TRAVA DE MUDANÇA DE STATUS:
+        // Identifica com precisão o ID do usuário autenticado vindo do Token JWT (id ou sub)
+        const idUsuarioLogado = usuarioLogado.id || usuarioLogado.sub;
+
+        // 1. TRAVA DE MUDANÇA DE STATUS:
         if (updateAgendamentoDto.status && updateAgendamentoDto.status !== agendamento.status) {
             // Clientes nunca alteram status
             if (usuarioLogado.tipo === 'cliente') {
@@ -98,8 +100,8 @@ export class AgendamentoService {
                 );
             }
             
-            // Empreendedores só mudam o status se o serviço for deles
-            if (usuarioLogado.tipo === 'empreendedor' && agendamento.servico?.usuario?.id !== usuarioLogado.id) {
+            // Empreendedores só mudam o status se o serviço for deles (Tratado com coerção numérica rigorosa)
+            if (usuarioLogado.tipo === 'empreendedor' && Number(agendamento.servico?.usuario?.id) !== Number(idUsuarioLogado)) {
                 throw new HttpException(
                     'Você só pode alterar o status de agendamentos pertencentes aos seus próprios serviços!', 
                     HttpStatus.FORBIDDEN
@@ -109,10 +111,10 @@ export class AgendamentoService {
             agendamento.status = updateAgendamentoDto.status;
         }
 
-        // 2. 🔒 TRAVA PARA EDIÇÃO DE OUTROS DADOS (Horário/Serviço/etc):
-        // Garante que o usuário mexendo no agendamento é o cliente dono dele OU o prestador dono do serviço.
-        const éOClienteDono = agendamento.usuario?.id === usuarioLogado.id;
-        const éOPrestadorDono = agendamento.servico?.usuario?.id === usuarioLogado.id;
+        // 2. TRAVA PARA EDIÇÃO DE OUTROS DADOS (Horário/Serviço/etc):
+        // Garante coerção numérica (Number) para evitar erros de comparação entre String e Number
+        const éOClienteDono = Number(agendamento.usuario?.id) === Number(idUsuarioLogado);
+        const éOPrestadorDono = Number(agendamento.servico?.usuario?.id) === Number(idUsuarioLogado);
 
         if (!éOClienteDono && !éOPrestadorDono) {
             throw new HttpException(
@@ -134,8 +136,8 @@ export class AgendamentoService {
                 throw new HttpException('Serviço não encontrado!', HttpStatus.NOT_FOUND);
             }
             
-            // Segurança extra: Se um cliente tentar trocar o serviço na edição, o novo serviço também deve ser do mesmo profissional
-            if (usuarioLogado.tipo === 'empreendedor' && servico.usuario?.id !== usuarioLogado.id) {
+            // Segurança extra: Se for empreendedor, o novo serviço também deve ser da autoria dele
+            if (usuarioLogado.tipo === 'empreendedor' && Number(servico.usuario?.id) !== Number(idUsuarioLogado)) {
                 throw new HttpException('Você não pode associar um serviço de terceiros a este agendamento!', HttpStatus.FORBIDDEN);
             }
 
@@ -159,14 +161,15 @@ export class AgendamentoService {
         return await this.agendamentoRepository.save(agendamento);
     }
 
-    // 🛠️ MÉTODO DELETE ATUALIZADO COM VALIDAÇÃO DE PROPRIEDADE (OWNERSHIP):
+    // MÉTODO DELETE ATUALIZADO COM TRATAMENTO DE COMPARADOR DE NÚMERO:
     async delete(id: number, usuarioLogado: any): Promise<DeleteResult> {
         const agendamento = await this.findById(id);
+        const idUsuarioLogado = usuarioLogado.id || usuarioLogado.sub;
 
-        const éOClienteDono = agendamento.usuario?.id === usuarioLogado.id;
-        const éOPrestadorDono = agendamento.servico?.usuario?.id === usuarioLogado.id;
+        const éOClienteDono = Number(agendamento.usuario?.id) === Number(idUsuarioLogado);
+        const éOPrestadorDono = Number(agendamento.servico?.usuario?.id) === Number(idUsuarioLogado);
 
-        // 🔒 TRAVA DE SEGURANÇA: Só deleta/cancela quem está envolvido no agendamento
+        // TRAVA DE SEGURANÇA: Só deleta/cancela quem está envolvido no agendamento
         if (!éOClienteDono && !éOPrestadorDono) {
             throw new HttpException(
                 'Você não tem permissão para cancelar ou excluir este agendamento!', 
