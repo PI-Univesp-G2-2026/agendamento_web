@@ -22,7 +22,7 @@ export class AuthService{
 
         const matchPassword = await this.bcrypt.compararSenhas(senha, buscaUsuario.senha)
 
-        if(buscaUsuario && matchPassword){
+        if(matchPassword){
             const { senha, ...resposta } = buscaUsuario
             return resposta
         }
@@ -33,14 +33,15 @@ export class AuthService{
 
     async login(usuarioLogin: UsuarioLogin){
 
-        const payload = { sub: usuarioLogin.usuario }
+        const payload = { sub: usuarioLogin.email };
 
-        const buscaUsuario = await this.usuarioService.findByUsuario(usuarioLogin.usuario)
+        const buscaUsuario = await this.usuarioService.findByUsuario(usuarioLogin.email);
+
 
         return{
             id: buscaUsuario.id,
             nome: buscaUsuario.nome,
-            usuario: usuarioLogin.usuario,
+            usuario: usuarioLogin.email,
             senha: '',
             token: `Bearer ${this.jwtService.sign(payload)}`,
         }
