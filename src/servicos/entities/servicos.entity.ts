@@ -1,7 +1,8 @@
 import { IsNotEmpty } from "class-validator"
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from "typeorm"
+import { Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm"
 import { Agendamento } from "../../agendamento/entities/agendamento.entity"
 import { ApiProperty } from "@nestjs/swagger/dist/decorators/api-property.decorator"
+import { Usuarios } from "../../usuarios/entities/usuarios.entity"
 
 @Entity({name: "tb_servicos"})
 export class Servicos {
@@ -27,4 +28,7 @@ export class Servicos {
     @ApiProperty()
     @OneToMany(() => Agendamento, (agendamento) => agendamento.servico)
     agendamentos!: Agendamento[]
+
+    @ManyToOne(() => Usuarios, (usuario) => usuario.servicos)
+    usuario!: Usuarios // O empreendedor dono deste serviço
 }
