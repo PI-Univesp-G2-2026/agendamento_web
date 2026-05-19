@@ -2,6 +2,7 @@ import { IsEmail, IsNotEmpty } from "class-validator"
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from "typeorm"
 import { Agendamento } from "../../agendamento/entities/agendamento.entity"
 import { ApiProperty } from "@nestjs/swagger/dist/decorators/api-property.decorator"
+import { Servicos } from "../../servicos/entities/servicos.entity"
 
 @Entity({name: "tb_usuarios"})
 export class Usuarios {
@@ -33,4 +34,8 @@ export class Usuarios {
     @ApiProperty()
     @OneToMany(() => Agendamento, (agendamento) => agendamento.usuario)
     agendamentos!: Agendamento[]
+
+    @ApiProperty({ type: () => Servicos, isArray: true })
+    @OneToMany(() => Servicos, (servico) => servico.usuario)
+    servicos!: Servicos[]
 }

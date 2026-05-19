@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsNumber, IsString, IsPositive } from "class-validator";
+import { IsNotEmpty, IsNumber, IsString, IsPositive, IsInt } from "class-validator";
 
 export class CreateServicosDto {
     @IsNotEmpty()
@@ -14,4 +14,9 @@ export class CreateServicosDto {
     @IsNumber()
     @IsPositive()
     duracao_minutos!: number;
+
+    @IsNotEmpty({ message: 'O ID do usuário prestador é obrigatório.' })
+    @IsInt() 
+    @IsPositive()
+    usuarioId!: number;
 }
