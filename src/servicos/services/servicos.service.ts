@@ -2,6 +2,7 @@ import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { ILike, Repository, DeleteResult } from "typeorm";
 import { Servicos } from "../entities/servicos.entity";
+import { Usuarios } from "../../usuarios/entities/usuarios.entity"; // 👇 Importe a entidade de Usuários
 import { CreateServicosDto } from "../dto/create-servicos.dto";
 import { UpdateServicosDto } from "../dto/update-servicos.dto";
 
@@ -9,7 +10,11 @@ import { UpdateServicosDto } from "../dto/update-servicos.dto";
 export class ServicosService {
     constructor(
         @InjectRepository(Servicos)
-        private servicosRepository: Repository<Servicos>
+        private servicosRepository: Repository<Servicos>,
+
+        // 👇 ADICIONE O REPOSITÓRIO DE USUÁRIOS AQUI NO CONSTRUTOR:
+        @InjectRepository(Usuarios)
+        private usuariosRepository: Repository<Usuarios>
     ) { }
 
     async findAll(): Promise<Servicos[]> {
@@ -18,12 +23,9 @@ export class ServicosService {
         });
     }
 
-
     async findById(id: number): Promise<Servicos> {
         let servicos = await this.servicosRepository.findOne({
-            where: {
-                id
-            },
+            where: { id },
             relations: { usuario: true },
         });
 
@@ -35,16 +37,32 @@ export class ServicosService {
 
     async findByNome(nome: string): Promise<Servicos[]> {
         return await this.servicosRepository.find({
-            where: {
-                nome: ILike(`%${nome}%`)
-            },
+            where: { nome: ILike(`%${nome}%`) },
             relations: { usuario: true },
         });
     }
 
+    // 🛠️ MÉTODO CREATE CORRIGIDO E AMARRADO:
     async create(createServicosDto: CreateServicosDto): Promise<Servicos> {
-        const servicoCriado = this.servicosRepository.create(createServicosDto);
-        return await this.servicosRepository.save(servicoCriado);
+        // 1. Busca a entidade do profissional usando o usuarioId enviado pelo React
+        const usuario = await this.usuariosRepository.findOne({
+            where: { id: createServicosDto.usuarioId }
+        });
+
+        // 2. Se o usuário não existir, barra a operação
+        if (!usuario) {
+            throw new HttpException('Profissional prestador não encontrado!', HttpStatus.NOT_FOUND);
+        }
+
+        // 3. Cria o objeto acoplando a entidade Usuarios inteira, não só o ID solto
+        const novoServico = this.servicosRepository.create({
+            nome: createServicosDto.nome,
+            preco: createServicosDto.preco,
+            duracao_minutos: createServicosDto.duracao_minutos,
+            usuario: usuario 
+        });
+
+        return await this.servicosRepository.save(novoServico);
     }
 
     async update(updateServicosDto: UpdateServicosDto): Promise<Servicos> {
@@ -75,5 +93,4 @@ export class ServicosService {
         await this.findById(id);
         return await this.servicosRepository.delete(id);
     }
-
 }
