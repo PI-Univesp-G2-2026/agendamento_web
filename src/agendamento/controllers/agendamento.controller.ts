@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards, Req } from "@nestjs/common"; // 👈 Certifique-se de que o 'Req' foi adicionado aqui nos imports do @nestjs/common
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards, Req, ParseIntPipe } from "@nestjs/common"; // 👈 Certifique-se de que o 'Req' foi adicionado aqui nos imports do @nestjs/common
 import { AgendamentoService } from "../services/agendamento.service";
 import { Agendamento } from "../entities/agendamento.entity";
 import { CreateAgendamentoDto } from "../dto/create-agendamento.dto";
@@ -31,7 +31,7 @@ export class AgendamentoController {
 
   @Get('/:id')
   @HttpCode(HttpStatus.OK)
-  findById(@Param('id') id: number): Promise<Agendamento> {
+  findById(@Param('id', ParseIntPipe) id: number): Promise<Agendamento> {
       return this.agendamentoService.findById(id);
    }
 
@@ -45,7 +45,7 @@ export class AgendamentoController {
   @Put('/:id') 
   @HttpCode(HttpStatus.OK)
   update(
-    @Param('id') id: number, 
+    @Param('id', ParseIntPipe) id: number, 
     @Body() updateAgendamentoDto: UpdateAgendamentoDto,
     @Req() req: any 
   ): Promise<Agendamento> {
@@ -58,7 +58,7 @@ export class AgendamentoController {
 
   @Delete('/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  delete(@Param('id') id: number, @Req() req: any): Promise<DeleteResult> {
+  delete(@Param('id', ParseIntPipe) id: number, @Req() req: any): Promise<DeleteResult> {
       return this.agendamentoService.delete(id, req.user);
   }
 }
