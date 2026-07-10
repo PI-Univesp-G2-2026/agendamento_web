@@ -2,8 +2,8 @@ import { IsInt, IsNotEmpty, IsOptional, IsString } from "class-validator";
 
 export class UpdateAgendamentoDto {
     @IsInt()
-    @IsNotEmpty()
-    id!: number;
+    @IsOptional()
+    id?: number;
 
     @IsInt()
     @IsOptional()
